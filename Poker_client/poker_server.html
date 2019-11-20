@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Texas Poker</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script type="text/javascript" src="src/core.js"></script>
+    <script src="src/md5.js"></script>
+
+</head>
+<body>
+
+<div id="User" v-if="seen">
+    <input v-model="username"  placeholder="username">
+    <br>
+    <input v-model="password"  placeholder="password" @keyup.enter="login">
+    <br>
+    <button v-on:click="login">login</button>
+    <button v-on:click="register">register</button>
+    <p>{{ message }}</p>
+</div>
+
+<div id="Join" v-if="login">
+    <p>{{ message }}</p>
+    <button v-if="seen" v-on:click="a2">Join game</button>
+    <button v-if="quit" v-on:click="a1">Quit game</button>
+</div>
+
+<div id="public_cards">
+    <p v-if="seen" style=font-size:26px>{{ message }}</p>
+</div>
+
+<div id="Your_cards">
+    <p v-if="seen" style=font-size:26px>{{ message }}</p>
+</div>
+
+<div v-if="seen" id="broadcast">
+    <p>-------------------------------------------------------------------------------------</p>
+    <p  v-for="ms in messages">{{ ms }}</p>
+    <p>-------------------------------------------------------------------------------------</p>
+</div>
+
+<div id="option" v-if="seen">
+    <p>{{ notice }}</p>
+    <input type="radio" id="one" value="1" v-model="picked">
+    <label for="one">1. Add</label>
+    <input type="radio" id="two" value="2" v-model="picked">
+    <label for="two">2. Follow</label>
+    <input type="radio" id="Three" value="3" v-model="picked">
+    <label for="Three">3. Fold</label>
+    <br>
+    <button v-on:click="subm_o">Submit option: {{ picked }}</button>
+</div>
+
+<div id="value" v-if="seen">
+    <br>
+    <p>{{ notice }}</p>
+    <input v-model="message"  placeholder="Input your value" @keyup.enter="subm_v">
+    <button v-on:click="subm_v">submit</button>
+</div>
+
+<div id="say" v-if="seen">
+    <p>{{ notice }}</p>
+    <input v-model="message"  placeholder="bbbbb" @keyup.enter="subm_s">
+    <button v-on:click="subm_s">submit</button>
+</div>
+
+<script>
+
+    app1 = new Vue({
+        el: '#Join',
+        data: {
+            message: 'Do you want to join the game?',
+            seen: true,
+            ID: '-1',
+            quit: false,
+            hostName: 'http://10.0.0.205:5000',
+            repos: 'https://awesome-texas-poker.appspot.com',
+            login: false
+        },
+        methods: {
+            sleep: function (ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            },
+            a1: function ()  {
+                if (app1.ID !== '-1'){
+                axios.get(this.hostName + '/ingame/' + app1.ID + '/quit').then(response =>
+                {
+                    if (response.data === 1){
+                        this.message = 'Quit successfully, do you want to join the game again?';
+                        this.ID = '-1';
+                        this.quit = false;
+                        this.seen = true;
+                        app6.seen = false;
+                        app5.seen = false;
+                        app7.seen = false;
+                    }
+                })
+                }
+            },
+            a2: function ()  {
+                axios.get(this.hostName + '/join_game').then(response =>
+                {
+                    let dic = response.data;
+                    this.message = dic['content'];
+                    this.ID = dic["ID"];
+                    this.seen = false;
+                    this.quit = true;
+                    app6.seen = true;
+                    app5.seen = true;
+                    app7.seen = true;
+                })
+            }
+
+        }
+    });
+
+    app2 = new Vue({
+        el: '#broadcast',
+        data: {
+            messages: [],
+            seen: false,
+            found: true
+        },
+        mounted: async function () {
+            while (true) {
+                await app1.sleep(400);
+                this.get_broadcast();
+            }
+        },
+        methods: {
+            get_broadcast: function () {
+                if (app1.ID !== '-1'){
+                    axios.get(app1.hostName + '/ingame/broadcast').then(response =>
+                    {
+                        let ne_l = [];
+                        for(let i in response.data){
+                            ne_l.push(response.data[i]);
+                        }
+                        this.messages = ne_l;
+                        if (this.messages.length !== 0){
+                            this.seen = true;
+                        }
+                    })
+                }
+            }
+        }
+    });
+
+    app3 = new Vue({
+        el: '#public_cards',
+        data: {
+            message: '',
+            seen: false,
+        },
+        mounted: async function () {
+            while (true) {
+                await app1.sleep(1000);
+                this.get_broadcast();
+            }
+        },
+        methods: {
+            get_broadcast: function () {
+                if (app1.ID !== '-1'){
+                    axios.get(app1.hostName + '/ingame/public').then(response =>
+                    {
+                        this.message = response.data;
+                        if (this.message !== ''){
+                            this.seen = true;
+                        }
+                    })
+                }
+            }
+        }
+    });
+
+    app4 = new Vue({
+        el: '#Your_cards',
+        data: {
+            message: '',
+            seen: false,
+        },
+        mounted: async function () {
+            while (true) {
+                await app1.sleep(1000);
+                this.get_cards();
+            }
+        },
+        methods: {
+            get_cards: function () {
+                if (app1.ID !== '-1'){
+                    axios.get(app1.hostName + '/ingame/get_card/' + app1.ID).then(response =>
+                    {
+                        this.message = response.data;
+                        if (this.message !== ''){
+                            this.seen = true;
+                        }
+                    })
+                }
+            }
+        }
+    });
+
+    app5 = new Vue({
+        el: '#option',
+        data: {
+            notice: 'Make your option',
+            picked: '',
+            seen: false,
+        },
+        methods: {
+            subm_o: function () {
+                if (app1.ID !== '-1'){
+                    axios.get(app1.hostName + '/ingame/' + app1.ID + '/option/' + String(this.picked)).then(async response =>
+                    {
+                        if (response.data === 1){
+                            this.notice = 'Submit successfully.';
+                        }else{
+                            this.notice = 'Submit failed.';
+                        }
+                        await app1.sleep(500);
+                        this.notice = 'Make your option';
+                    })
+                }
+            }
+        }
+    });
+
+    app6 = new Vue({
+        el: '#value',
+        data: {
+            message: '',
+            seen: false,
+            notice: 'Input the value:',
+        },
+        methods: {
+            subm_v: function () {
+                if (app1.ID !== '-1'){
+                    let ms = this.message;
+                    this.notice = 'Input the value';
+                    this.message = '';
+                    axios.get(app1.hostName + '/ingame/' + app1.ID + '/value/' + String(ms)).then(async response =>
+                    {
+                        if (response.data === 1){
+                            this.notice = 'Submit successfully.';
+                        }else{
+                            this.notice = 'Submit failed. Not your turn';
+                        }
+                        await app1.sleep(500);
+
+                    })
+                }
+            }
+        }
+    });
+
+    app7 = new Vue({
+        el: '#say',
+        data: {
+            message: '',
+            seen: false,
+            notice: 'bbbbb',
+        },
+        methods: {
+            subm_s: function () {
+                if (app1.ID !== '-1'){
+                    let ms = this.message;
+                    this.message = '';
+                    this.notice = 'bbbbb';
+                    axios.get(app1.hostName + '/ingame/' + app1.ID + '/say/' + String(ms)).then(async response =>
+                    {
+                        if (response.data === 0){
+                            this.notice = 'bb失败';
+                        }else{
+                            this.notice = 'bb成功';
+                        }
+                        await app1.sleep(500);
+                    })
+                }
+            }
+        }
+    });
+
+    app8 = new Vue({
+        el: '#User',
+        data: {
+            seen: true,
+            message: '',
+            username: '',
+            password: '',
+        },
+        methods: {
+            gethash: function(psw){
+                let h = CryptoJS.MD5(psw).toString();
+                console.log(h);
+                return h;
+            },
+
+            check: function (){
+                if (this.username.length < 3 || this.password.length < 3){
+                    this.message = 'Invalid username or password.';
+                    return false;
+                }
+                return true;
+            },
+
+            login: function () {
+                if (!this.check()){
+                    return false;
+                }
+                this.message = 'login...';
+                axios.get(app1.hostName + '/login/' + this.username + '/' + this.gethash(this.password)).then( response =>
+                {
+                    if (response.data.status === 0){
+                        this.message = 'login failed';
+                    }else{
+                        this.message = 'login success';
+                        sessionStorage.setItem('tmp_code', response.data.content);
+                        app1.login = true;
+                        this.seen = false;
+                    }
+                });
+                return true;
+            },
+
+            register: function () {
+                if (!this.check()){
+                    return false;
+                }
+                this.message = 'register...';
+                axios.get(app1.hostName + '/register/' + this.username + '/' + this.gethash(this.password)).then(async response =>
+                {
+                    if (response.data.status === 0){
+                        this.message = 'register failed';
+                    }else{
+                        this.message = 'register success';
+                        sessionStorage.setItem('tmp_code', response.data.content);
+                        app1.login = true;
+                        this.seen = false;
+                    }
+                });
+                return true;
+            },
+        },
+        mounted: function () {
+            tmp = sessionStorage.getItem('tmp_code');
+            axios.get('http://10.0.0.205:5000/read_session/' + tmp).then( response =>
+            {
+                if (response.data.status === '1'){
+                    this.message = 'login success';
+                    app1.message = 'Welcome back, ' + response.data.ID + '. ' + app1.message;
+                    app1.login = true;
+                    app8.seen = false;
+                }
+            });
+        },
+    });
+</script>
+</body>
+</html>

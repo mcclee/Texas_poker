@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Texas Poker</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script type="text/javascript" src="src/core.js"></script>
+    <script src="src/md5.js"></script>
+
+</head>
+<body>
+
+<div id="User" v-if="seen">
+    <input v-model="username"  placeholder="username">
+    <br>
+    <input v-model="password"  placeholder="password" @keyup.enter="login">
+    <br>
+    <button v-on:click="login">login</button>
+    <button v-on:click="register">register</button>
+    <p>{{ message }}</p>
+</div>
+
+<script>
+    app8 = new Vue({
+        el: '#User',
+        data: {
+            seen: true,
+            message: '',
+            username: '',
+            password: '',
+            hostName: 'http://10.0.0.205:5000',
+        },
+        methods: {
+            gethash: function(psw){
+                let h = CryptoJS.MD5(psw).toString();
+                console.log(h);
+                return h;
+            },
+
+            check: function (){
+                if (this.username.length < 3 || this.password.length < 3){
+                    this.message = 'Invalid username or password.';
+                    return false;
+                }
+                return true;
+            },
+
+            login: function () {
+                if (!this.check()){
+                    return false;
+                }
+                this.message = 'login...';
+                axios.get(this.hostName + '/login/' + this.username + '/' + this.gethash(this.password)).then(async response =>
+                {
+                    if (response.data === 0){
+                        this.message = 'login failed';
+                    }else{
+                        this.message = 'login success';
+                        this.seen = false;
+                    }
+                });
+                return true;
+            },
+
+            register: function () {
+                if (!this.check()){
+                    return false;
+                }
+                this.message = 'register...';
+                axios.get(this.hostName + '/register/' + this.username + '/' + this.gethash(this.password)).then(async response =>
+                {
+                    if (response.data === 0){
+                        this.message = 'register failed';
+                    }else{
+                        this.message = 'register success';
+                        this.seen = false;
+                    }
+                });
+                return true;
+            },
+        }
+    });
+</script>
+</body>
+</html>

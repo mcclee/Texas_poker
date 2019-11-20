@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+
+<div id="app-5">
+    <p >{{ message }}</p>
+    <button v-on:click="reverseMessage">反转消息</button>
+    <button v-on:click="a1">请求</button>
+</div>
+
+<script>
+    var app5 = new Vue({
+        el: '#app-5',
+        data: {
+            message: 'Hello Vue.js!',
+            seen: true,
+            ti: String(Date.now()),
+        },
+        methods: {
+            reverseMessage: function () {
+                this.seen = !this.seen;
+            },
+            sleep: function (ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            },
+            a1: async function () {
+                while (this.seen) {
+                    await this.sleep(500);
+                    this.a2();
+                }
+            },
+            a2: function ()  {
+                axios.get('http://10.0.0.205:5000/test').then(response => {console.log(response.data);
+                    this.message = response.data})
+            }
+
+        }
+    })
+</script>
+</body>
+</html>
