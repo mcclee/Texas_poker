@@ -10,14 +10,18 @@
 
 </head>
 <body>
-
+<div style="text-align: center;">
 <div id="User" v-if="seen">
     <input v-model="username"  placeholder="username">
     <br>
     <input v-model="password"  placeholder="password" @keyup.enter="login">
+    <br v-if="re">
+    <input v-model="password2"  placeholder="retype password" v-if="re" >
     <br>
     <button v-on:click="login">login</button>
-    <button v-on:click="register">register</button>
+    <button v-on:click="register" v-if="re">register</button>
+    <br>
+    <button v-on:click="want_to" v-if="!re" style="border:none;">I want to register</button>
     <p>{{ message }}</p>
 </div>
 
@@ -65,7 +69,7 @@
     <input v-model="message"  placeholder="bbbbb" @keyup.enter="subm_s">
     <button v-on:click="subm_s">submit</button>
 </div>
-
+</div>
 <script>
 
     app1 = new Vue({
@@ -77,7 +81,9 @@
             quit: false,
             hostName: 'http://10.0.0.205:5000',
             repos: 'https://awesome-texas-poker.appspot.com',
-            login: false
+            login: false,
+            ing: false,
+            requests: [0, 0, 0],
         },
         methods: {
             sleep: function (ms) {
@@ -89,18 +95,18 @@
                 {
                     if (response.data === 1){
                         this.message = 'Quit successfully, do you want to join the game again?';
-                        this.ID = '-1';
                         this.quit = false;
                         this.seen = true;
                         app6.seen = false;
                         app5.seen = false;
                         app7.seen = false;
+                        this.ing = false;
                     }
                 })
                 }
             },
             a2: function ()  {
-                axios.get(this.hostName + '/join_game').then(response =>
+                axios.get(this.hostName + '/join_game/' + app1.ID).then(response =>
                 {
                     let dic = response.data;
                     this.message = dic['content'];
@@ -110,6 +116,7 @@
                     app6.seen = true;
                     app5.seen = true;
                     app7.seen = true;
+                    this.ing = true;
                 })
             }
 
@@ -126,18 +133,36 @@
         mounted: async function () {
             while (true) {
                 await app1.sleep(400);
-                this.get_broadcast();
+                this.get_changes();
             }
         },
         methods: {
+            get_changes: function(){
+                axios.get(app1.hostName + '/ingame/update/' + app1.requests[0] + '/' + app1.requests[1] + '/' + app1.requests[2]).then(response =>
+                {
+                    if (response.data[0] === 1){
+                        this.get_broadcast();
+                    }
+                    if (response.data[1] === 1){
+                        app3.get_pub();
+                    }
+                    if (response.data[2] === 1){
+                        app4.get_cards();
+                    }
+                })
+            },
+
             get_broadcast: function () {
                 if (app1.ID !== '-1'){
                     axios.get(app1.hostName + '/ingame/broadcast').then(response =>
                     {
                         let ne_l = [];
                         for(let i in response.data){
-                            ne_l.push(response.data[i]);
+                            if (i !== '-1'){
+                                ne_l.push(response.data[i]);
+                            }
                         }
+                        app1.requests[0] = response.data[-1];
                         this.messages = ne_l;
                         if (this.messages.length !== 0){
                             this.seen = true;
@@ -154,18 +179,13 @@
             message: '',
             seen: false,
         },
-        mounted: async function () {
-            while (true) {
-                await app1.sleep(1000);
-                this.get_broadcast();
-            }
-        },
         methods: {
-            get_broadcast: function () {
-                if (app1.ID !== '-1'){
+            get_pub: function () {
+                if (app1.ing){
                     axios.get(app1.hostName + '/ingame/public').then(response =>
                     {
-                        this.message = response.data;
+                        this.message = response.data['pub'];
+                        app1.requests[1] = response.data['vs'];
                         if (this.message !== ''){
                             this.seen = true;
                         }
@@ -181,18 +201,13 @@
             message: '',
             seen: false,
         },
-        mounted: async function () {
-            while (true) {
-                await app1.sleep(1000);
-                this.get_cards();
-            }
-        },
         methods: {
             get_cards: function () {
-                if (app1.ID !== '-1'){
+                if (app1.ing){
                     axios.get(app1.hostName + '/ingame/get_card/' + app1.ID).then(response =>
                     {
-                        this.message = response.data;
+                        this.message = response.data['card'];
+                        app1.requests[2] = response.data['vs'];
                         if (this.message !== ''){
                             this.seen = true;
                         }
@@ -211,7 +226,7 @@
         },
         methods: {
             subm_o: function () {
-                if (app1.ID !== '-1'){
+                if (app1.ing){
                     axios.get(app1.hostName + '/ingame/' + app1.ID + '/option/' + String(this.picked)).then(async response =>
                     {
                         if (response.data === 1){
@@ -236,7 +251,7 @@
         },
         methods: {
             subm_v: function () {
-                if (app1.ID !== '-1'){
+                if (app1.ing){
                     let ms = this.message;
                     this.notice = 'Input the value';
                     this.message = '';
@@ -289,6 +304,8 @@
             message: '',
             username: '',
             password: '',
+            password2: '',
+            re: false,
         },
         methods: {
             gethash: function(psw){
@@ -312,32 +329,40 @@
                 this.message = 'login...';
                 axios.get(app1.hostName + '/login/' + this.username + '/' + this.gethash(this.password)).then( response =>
                 {
-                    if (response.data.status === 0){
+                    if (response.data.status === '0'){
                         this.message = 'login failed';
                     }else{
                         this.message = 'login success';
                         sessionStorage.setItem('tmp_code', response.data.content);
                         app1.login = true;
                         this.seen = false;
+                        app1.ID = response.data.ID;
                     }
                 });
                 return true;
             },
-
+            want_to: function(){
+              this.re = true;
+            },
             register: function () {
+                if (this.password !== this.password2){
+                    this.message = 'Unmatched passwords!';
+                    return false;
+                }
                 if (!this.check()){
                     return false;
                 }
                 this.message = 'register...';
                 axios.get(app1.hostName + '/register/' + this.username + '/' + this.gethash(this.password)).then(async response =>
                 {
-                    if (response.data.status === 0){
+                    if (response.data.status === '0'){
                         this.message = 'register failed';
                     }else{
                         this.message = 'register success';
                         sessionStorage.setItem('tmp_code', response.data.content);
                         app1.login = true;
                         this.seen = false;
+                        app1.ID = response.data.ID;
                     }
                 });
                 return true;
@@ -352,6 +377,7 @@
                     app1.message = 'Welcome back, ' + response.data.ID + '. ' + app1.message;
                     app1.login = true;
                     app8.seen = false;
+                    app1.ID = response.data.ID;
                 }
             });
         },
