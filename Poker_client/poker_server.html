@@ -7,36 +7,45 @@
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script type="text/javascript" src="src/core.js"></script>
     <script src="src/md5.js"></script>
-
 </head>
+
 <body>
+
 <div style="text-align: center;">
-<div id="User" v-if="seen">
-    <input v-model="username"  placeholder="username">
+<div id="User" v-if="seen" >
+    <input v-model="username"  placeholder="username" style="font-size: 28px">
     <br>
-    <input v-model="password"  placeholder="password" @keyup.enter="login">
+    <input v-model="password"  placeholder="password" @keyup.enter="login" style="font-size: 28px">
     <br v-if="re">
-    <input v-model="password2"  placeholder="retype password" v-if="re" >
+    <input v-model="password2"  placeholder="retype password" v-if="re" style="font-size: 28px">
     <br>
-    <button v-on:click="login">login</button>
-    <button v-on:click="register" v-if="re">register</button>
+    <button v-on:click="login" style="font-size: 28px">login</button>
+    <button v-on:click="register" v-if="re" style="font-size: 28px">register</button>
     <br>
-    <button v-on:click="want_to" v-if="!re" style="border:none;">I want to register</button>
-    <p>{{ message }}</p>
+    <button v-on:click="want_to" v-if="!re" style="border:none; font-size: 28px">I want to register</button>
+    <p style="font-size: 28px">{{ message }}</p>
 </div>
 
 <div id="Join" v-if="login">
     <p>{{ message }}</p>
-    <button v-if="seen" v-on:click="a2">Join game</button>
+    <input v-model="room"  placeholder="room number" v-if="seen">
+    <input v-model="size"  placeholder="room size" v-if="seen">
+    <button v-if="seen" v-on:click="a3">Join a game randomly</button>
+    <button v-if="seen" v-on:click="a2">Join the room</button>
+    <button v-if="seen" v-on:click="a4">create a game</button>
     <button v-if="quit" v-on:click="a1">Quit game</button>
 </div>
 
+<div id="info" v-if="seen">
+    <p>You ID: {{ ID }}, Your coins: {{ coins }}</p>
+</div>
+
 <div id="public_cards">
-    <p v-if="seen" style=font-size:26px>{{ message }}</p>
+    <p v-if="seen" style=font-size:24px>{{ message }}</p>
 </div>
 
 <div id="Your_cards">
-    <p v-if="seen" style=font-size:26px>{{ message }}</p>
+    <p v-if="seen" style=font-size:24px>{{ message }}</p>
 </div>
 
 <div v-if="seen" id="broadcast">
@@ -70,24 +79,55 @@
     <button v-on:click="subm_s">submit</button>
 </div>
 </div>
+
 <script>
 
     app1 = new Vue({
         el: '#Join',
         data: {
-            message: 'Do you want to join the game?',
+            message: 'Input a room number or join a game randomly.',
             seen: true,
             ID: '-1',
             quit: false,
-            hostName: 'http://10.0.0.205:5000',
+            hostName: 'http://47.101.138.156:5001',
             repos: 'https://awesome-texas-poker.appspot.com',
             login: false,
             ing: false,
             requests: [0, 0, 0],
+            room: '',
+            size: '',
         },
         methods: {
             sleep: function (ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
+            },
+
+            check_avab: function(size) {
+                console.log(isNaN(size));
+                return !(isNaN(size) || Number(size) > 9 || Number(size) < 2);
+            },
+            a4: function () {
+                if (!this.check_avab(this.size)){
+                    this.message = 'Not a appropriate room size.';
+                    return
+                }
+                if (app1.ID !== '-1'){
+                    axios.get(this.hostName + '/create_game/' + app1.ID + '/' + this.size).then(response =>{
+                        if (response.data['status'] === '-1'){
+                            this.message = 'Create failed' + response.data['content'];
+                        }else{
+                            this.room = response.data['content'];
+                            this.message = 'You create a ' + this.size + ' successfully. The room number is ' + this.room;
+                            this.seen = false;
+                            this.quit = true;
+                            app6.seen = true;
+                            app5.seen = true;
+                            app7.seen = true;
+                            this.ing = true;
+                        }
+                    })
+                }
+
             },
             a1: function ()  {
                 if (app1.ID !== '-1'){
@@ -105,20 +145,32 @@
                 })
                 }
             },
+            a3: function () {
+                app1.room = '-1';
+                this.a2();
+            },
             a2: function ()  {
-                axios.get(this.hostName + '/join_game/' + app1.ID).then(response =>
+                if (app1.room.length === 0 || app1.size.length === 0){
+                    return
+                }
+                axios.get(this.hostName + '/join_game/' + app1.ID + '/' + app1.size + '/' + app1.room).then(response =>
                 {
                     let dic = response.data;
+                    if (dic['status'] === '0'){
+                        app1.room = '';
+                        app1.size = '';
+                    }
+                    else{
+                        this.seen = false;
+                        this.quit = true;
+                        app6.seen = true;
+                        app5.seen = true;
+                        app7.seen = true;
+                        this.ing = true;
+                    }
                     this.message = dic['content'];
-                    this.ID = dic["ID"];
-                    this.seen = false;
-                    this.quit = true;
-                    app6.seen = true;
-                    app5.seen = true;
-                    app7.seen = true;
-                    this.ing = true;
                 })
-            }
+            },
 
         }
     });
@@ -138,7 +190,7 @@
         },
         methods: {
             get_changes: function(){
-                axios.get(app1.hostName + '/ingame/update/' + app1.requests[0] + '/' + app1.requests[1] + '/' + app1.requests[2]).then(response =>
+                axios.get(app1.hostName + '/ingame/update/' + app1.ID + '/' + app1.requests[0] + '/' + app1.requests[1] + '/' + app1.requests[2]).then(response =>
                 {
                     if (response.data[0] === 1){
                         this.get_broadcast();
@@ -149,12 +201,13 @@
                     if (response.data[2] === 1){
                         app4.get_cards();
                     }
+                    app9.coins = response.data[3];
                 })
             },
 
             get_broadcast: function () {
                 if (app1.ID !== '-1'){
-                    axios.get(app1.hostName + '/ingame/broadcast').then(response =>
+                    axios.get(app1.hostName + '/ingame/broadcast/' + app1.ID).then(response =>
                     {
                         let ne_l = [];
                         for(let i in response.data){
@@ -182,7 +235,7 @@
         methods: {
             get_pub: function () {
                 if (app1.ing){
-                    axios.get(app1.hostName + '/ingame/public').then(response =>
+                    axios.get(app1.hostName + '/ingame/public/' + app1.ID).then(response =>
                     {
                         this.message = response.data['pub'];
                         app1.requests[1] = response.data['vs'];
@@ -229,11 +282,7 @@
                 if (app1.ing){
                     axios.get(app1.hostName + '/ingame/' + app1.ID + '/option/' + String(this.picked)).then(async response =>
                     {
-                        if (response.data === 1){
-                            this.notice = 'Submit successfully.';
-                        }else{
-                            this.notice = 'Submit failed.';
-                        }
+                        this.notice = 'Submitting...';
                         await app1.sleep(500);
                         this.notice = 'Make your option';
                     })
@@ -254,16 +303,12 @@
                 if (app1.ing){
                     let ms = this.message;
                     this.notice = 'Input the value';
-                    this.message = '';
+                    this.message = 'value';
                     axios.get(app1.hostName + '/ingame/' + app1.ID + '/value/' + String(ms)).then(async response =>
                     {
-                        if (response.data === 1){
-                            this.notice = 'Submit successfully.';
-                        }else{
-                            this.notice = 'Submit failed. Not your turn';
-                        }
+                        this.notice = 'Submitting...';
                         await app1.sleep(500);
-
+                        this.notice = 'Input the value';
                     })
                 }
             }
@@ -306,6 +351,7 @@
             password: '',
             password2: '',
             re: false,
+            coins: '--'
         },
         methods: {
             gethash: function(psw){
@@ -337,6 +383,8 @@
                         app1.login = true;
                         this.seen = false;
                         app1.ID = response.data.ID;
+                        app9.ID = app1.ID;
+                        app9.seen = true;
                     }
                 });
                 return true;
@@ -363,6 +411,8 @@
                         app1.login = true;
                         this.seen = false;
                         app1.ID = response.data.ID;
+                        app9.seen = true;
+                        app9.ID = app1.ID;
                     }
                 });
                 return true;
@@ -370,7 +420,7 @@
         },
         mounted: function () {
             tmp = sessionStorage.getItem('tmp_code');
-            axios.get('http://10.0.0.205:5000/read_session/' + tmp).then( response =>
+            axios.get('http://47.101.138.156:5001/read_session/' + tmp).then( response =>
             {
                 if (response.data.status === '1'){
                     this.message = 'login success';
@@ -378,10 +428,22 @@
                     app1.login = true;
                     app8.seen = false;
                     app1.ID = response.data.ID;
+                    app9.seen = true;
+                    app9.ID = app1.ID;
                 }
             });
         },
     });
+
+    app9 = new Vue({
+        el: '#info',
+        data: {
+            ID: '--',
+            coins: '--',
+            seen: false,
+        },
+        }
+    )
 </script>
 </body>
 </html>
