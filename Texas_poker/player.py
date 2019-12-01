@@ -10,6 +10,9 @@ class Player:
         self.gh = gh
         self.request = [self.id, 0, 0]
 
+    def set_handler(self, gh):
+        self.gh = gh
+
     def reset_request(self):
         self.request = [self.id, 0, 0]
 

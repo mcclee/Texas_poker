@@ -1,1 +1,1 @@
-create table User(id text primary key, password text, last_login_date text, coins integer, playtimes int);
+update User set playtimes=0, coins=1000;

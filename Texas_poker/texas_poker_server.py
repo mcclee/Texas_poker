@@ -1,175 +1,210 @@
 from flask import Flask, request, session, g, redirect, url_for, abort, \
     render_template, flash, Response, make_response
-import time
 from flask_cors import CORS
 import random
-from repos import TexasPoke as tp
+from Texas_poker import TexasPoke as tp
 from player import Player
 from flask import jsonify
-from collections import deque
 import game_public
-import sqlite3
 import User
+import game_handler
 
 app = Flask(__name__)
 CORS(app)
-players = {}  # id: gamer_ID
-realtime = {} # code: [user, password]
+realtime = {}  # code: [user, password]
+user_handler = User.DB(game_public.Db_name)
 
-class GameHandler:
-    def __init__(self, g):
-        self.globe = g
-        self.content = deque([])
-        self.request = [-1, -1]  # id: content
-        self.response = ''
-        self.option = -1
-        self.start = False
-        self.public = ''
-        self.counter = 0
-        self.ls = -1
-        self.json = None
-        self.players = players
-        self.game = None
 
-    def broadcast(self, s):
-        """
-        :param s: content of the broadcast
-        :return:
-        """
-        if len(self.content) >= 10:
-            self.content.popleft()
-        self.content.append(s)
-        self.counter += 1
-        print(s)
+class ServerHandler:
+    def __init__(self):
+        self.ghs = {}  # gh id: gh
+        self.index = 0
+        self.ingames = {}  # player: room_id
+        self.coins = {}
+        self.players = {}
 
-    def intable(self, v):
-        try:
-            int(v)
-        except ValueError:
-            return False
-        return True
+    def join(self, player, size, room_id):
+        if room_id == '-1':
+            for i in self.ghs:
+                if self.ghs[i].game.player_limitation == size and len(self.ghs[i].game.players) < self.ghs[i].game.player_limitation:
+                    if self.ghs[i].game.join_game(player):
+                        self.ingames[player.id] = i
+                        return True
+        else:
+            if self.ghs.get(room_id, None):
+                if self.ghs[room_id].game.join_game(player):
+                    self.ingames[player.id] = room_id
+                return True
+        return False
 
-    def clearall(self):
-        self.request = [-1, -1]
-        self.response = ''
-        self.option = -1
+    def create(self, player, size):
+        dic = {'status': '-1', 'content': ''}
+        if self.ingames.get(player.id, None):
+            dic['content'] = 'You have been in a game.'
+            return dic
+        gh = game_handler.GameHandler(g)
+        gh.set_db(user_handler)
+        self.ghs[self.index] = gh
+        tpgame = tp(gh, size, server)
+        gh.game = tpgame
+        gh.game.join_game(player)
+        self.ingames[player.id] = self.index
+        self.index += 1
+        dic['room'] = self.ingames[player.id]
+        dic['status'] = '1'
+        dic['content'] = self.ingames[player.id]
+        return dic
 
-    def get_broadcast(self):
-        if self.ls != self.counter:
-            self.ls = self.counter
-            dic = {}
-            for j, i in enumerate(self.content):
-                dic[j] = i
-            self.json = jsonify(dic)
-        return self.json
+    def check_player(self, ID):
+        if ID in self.ingames:
+            if self.ingames[ID] in self.ghs:
+                return True
+        return False
 
-    def set_public(self, s):
-        self.public = s
+    def quit(self, ID):
+        if self.ingames.get(ID, None):
+            self.ghs[self.ingames[ID]].game.quit(self.players[ID])
+            del self.ingames[ID]
 
-    def get_public(self):
-        return self.public
+    def update(self, ID, status_codes):
+        if ID not in self.ingames:
+            return {i: status_codes[i] for i in range(3)}
+        if self.ingames[ID] not in self.ghs:
+            return {i: status_codes[i] for i in range(3)}
+        return self.ghs[self.ingames[ID]].update(status_codes)
 
-    def set_game(self, game):
-        self.game = game
+    def get_broadcast(self, ID):
+        if ID in self.ingames:
+            if self.ingames[ID] in self.ghs:
+                return self.ghs[self.ingames[ID]].get_broadcast()
+        return jsonify({})
 
-    def send_request(self, request):
-        if self.game:
-            return self.game.next_step(request)
+    def get_public(self, ID):
+        if ID in self.ingames:
+            if self.ingames[ID] in self.ghs:
+                return {'pub': self.ghs[self.ingames[ID]].get_public(), 'vs': self.ghs[self.ingames[ID]].vs[1]}
+        return {'pub': '', 'vs': 0}
+
+    def get_cards(self, ID):
+        if self.check_player(ID):
+            return {'card': self.ghs[self.ingames[ID]].game.players[ID].get_cards(), 'vs': self.ghs[self.ingames[ID]].vs[2]}
+        return {'card': '', 'vs': 0}
+
+    def options(self, ID, option):
+        if self.check_player(ID):
+            self.players[ID].request[1] = int(option)
+            return self.ghs[self.ingames[ID]].send_request(self.players[ID].request)
         return '0'
 
+    def add_value(self, ID, value):
+        if self.check_player(ID):
+            self.players[ID].request[1] = 1
+            self.players[ID].request[2] = int(value)
+            res = self.ghs[self.ingames[ID]].send_request(self.players[ID].request)
+            self.players[ID].reset_request()
+            return res
+        return '0'
 
-gh = GameHandler(g)
-tpgame = tp(gh, game_public.player_limitation)
-gh.game = tpgame
-user_handler = User.DB('test.db')
+    def say(self, ID, s):
+        if self.check_player(ID):
+            self.ghs[self.ingames[ID]].broadcast(f'憨批 {ID} 说:' + str(s))
+
+    def set_coins(self, ID, coins):
+        if ID in self.coins:
+            self.coins[ID] = coins
+
+    def login(self, username, dic, res):
+        self.players[username] = Player(username, user_handler.get_coins(username), None)
+        self.coins[username] = res
+        code = str(hash(str(random.randint(1, 1000)) + username))[10: 26]
+        dic['coins'] = str(self.coins[username])
+        dic['ID'] = username
+        dic['content'] = code
+        dic['status'] = '1'
+        realtime[code] = dic
+
+
+server = ServerHandler()
 
 
 @app.route('/test', methods=['GET'])
 def show_entries():
-    a = request.cookies.get('username')
     return str(hash(str(random.randint(1, 1000))))[10: 18]
 
 
-@app.route('/join_game', methods=['GET'])
-def join():
-    dic = {
-        'content': '',
-        'ID': ''}
-    if len(players) >= game_public.player_limitation:
-        return jsonify(dic)
-    v = str(hash(str(random.randint(1, 1000))))[10: 18]
-    p = Player(v, 1000, gh)
-    players[v] = p
-    tpgame.join_game(p)
-    if len(players) == game_public.player_limitation:
-        tpgame.next_step([0, 0, 0])
-    print(players)
-    dic['ID'] = v
-    dic['content'] = f'Join the game successfulllllly, your id is {v}. When the next game start, you will be notified.'
+@app.route('/ingame/update/<ID>/<i1>/<i2>/<i3>', methods=['GET'])
+def upd(i1, i2, i3, ID):
+    dic = server.update(ID, [i1, i2, i3])
+    dic[3] = server.coins.get(ID, 0)
     return jsonify(dic)
 
 
-@app.route('/ingame/<ID>', methods=['GET'])
-def check_status(ID):
-    if gh.start is True:
-        if ID == gh.request[0]:
-            return str(gh.request[1])
-    return gh.get_broadcast()
+@app.route('/join_game/<ID>/<size>/<room>', methods=['GET'])
+def join(ID, size, room):
+    dic = {
+        'status': '0',
+        'content': '',
+        'ID': ''}
+    if ID in server.ingames:
+        dic['status'] = '1'
+        dic['ID'] = ID
+        dic['content'] = f'{ID}. Room number is {server.ingames[ID]}. You have been in a game. When the next game ' \
+                         f'start, you will be notified. '
+        return jsonify(dic)
+    else:
+        if not server.join(server.players[ID], int(size), room):
+            dic['ID'] = ID
+            dic['content'] = f'No such a room, {ID}, try later.'
+            return jsonify(dic)
+    dic['status'] = '1'
+    dic['ID'] = ID
+    dic['content'] = f'Join the game successfulllllly, {ID}. Room number is {server.ingames[ID]}. When the next game ' \
+                     f'start, you will be notified. '
+    return jsonify(dic)
 
 
-@app.route('/ingame/public', methods=['GET'])
-def get_public():
-    return gh.get_public()
+@app.route('/create_game/<ID>/<size>/', methods=['GET'])
+def create(ID, size):
+    if ID in server.players:
+        return jsonify(server.create(server.players[ID], int(size)))
+    return jsonify({'status': '-1', 'content': 'You have not logged in.'})
+
+
+@app.route('/ingame/broadcast/<ID>', methods=['GET'])
+def broadcast(ID):
+    return server.get_broadcast(ID)
+
+
+@app.route('/ingame/public/<ID>', methods=['GET'])
+def get_public(ID):
+    return jsonify(server.get_public(ID))
 
 
 @app.route('/ingame/get_card/<ID>', methods=['GET'])
 def get_card(ID):
-    if gh.game.start and ID in tpgame.players:
-        return tpgame.players[ID].get_cards()
-    else:
-        return ''
+    return jsonify(server.get_cards(ID))
 
 
 @app.route('/ingame/<ID>/option/<option>', methods=['GET'])
 def select_option(ID, option):
-    if ID in players:
-        players[ID].request[1] = int(option)
-        return gh.send_request(players[ID].request)
-    return '0'
+    return server.options(ID, option)
 
 
 @app.route('/ingame/<ID>/value/<value>', methods=['GET'])
 def select_value(ID, value):
-    if ID in players:
-        players[ID].request[1] = 1
-        players[ID].request[2] = int(value)
-        gh.send_request(players[ID].request)
-        return '1'
-    return '0'
+    return server.add_value(ID, value)
 
 
 @app.route('/ingame/<ID>/say/<said>', methods=['GET'])
 def say(ID, said):
-    gh.broadcast(f'憨批 {ID} 说:' + str(said))
+    server.say(ID, said)
     return '1'
 
 
 @app.route('/ingame/<ID>/quit', methods=['GET'])
 def quit(ID):
-    gh.broadcast(f'Player {ID} quit the playing game.')
-    if ID in players:
-        if gh.game:
-            gh.game.quit(players[ID])
-        del players[ID]
+    server.quit(ID)
     return '1'
-
-
-def new_dic(username, dic):
-    code = str(hash(str(random.randint(1, 1000)) + username))[10: 26]
-    dic['ID'] = username
-    dic['content'] = code
-    dic['status'] = '1'
-    realtime[code] = dic
 
 
 @app.route('/login/<username>/<psw>', methods=['GET'])
@@ -177,11 +212,14 @@ def login(username, psw):
     dic = {
         'status': '0',
         'content': '',
+        'coins': '0',
         'ID': ''}
+    if username in server.players:
+        return jsonify(dic)
     res = user_handler.login(username, psw)
     if len(res) == 0:
         return jsonify(dic)
-    new_dic(username, dic)
+    server.login(username, dic, res[0][1])
     return jsonify(dic)
 
 
@@ -190,10 +228,13 @@ def register(username, psw):
     dic = {
         'status': '0',
         'content': '',
+        'coins': '0',
         'ID': ''}
+    if username in server.players:
+        return jsonify(dic)
     if not user_handler.register(username, psw):
         return jsonify(dic)
-    new_dic(username, dic)
+    server.login(username, dic, 1000)
     return jsonify(dic)
 
 
@@ -202,6 +243,7 @@ def read_session(session):
     dic = {
         'status': '0',
         'content': '',
+        'coins': '0',
         'ID': ''}
     if session is None or session not in realtime:
         return jsonify(dic)

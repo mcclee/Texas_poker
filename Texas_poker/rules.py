@@ -1,7 +1,7 @@
 import time
 from functools import cmp_to_key
 import cards
-import texas_poker
+import Texas_poker
 
 
 class Rules:
@@ -203,8 +203,8 @@ if __name__ == '__main__':
         print(w)
         print('\n')
     '''
-    a1 = texas_poker.Player(0, 1000, None)
-    a2 = texas_poker.Player(1, 1000, None)
+    a1 = Texas_poker.Player(0, 1000, None)
+    a2 = Texas_poker.Player(1, 1000, None)
     a1.cards = [cards.Card(1, 2), cards.Card(2, 6), cards.Card(1, 14), cards.Card(0, 3), cards.Card(3, 4), cards.Card(3, 2), cards.Card(1, 13)]
     a2.cards = [cards.Card(1, 14), cards.Card(1, 11), cards.Card(2, 9), cards.Card(3, 13), cards.Card(1, 10), cards.Card(2, 10), cards.Card(2, 12)]
     ans = [a1, a2]

@@ -20,7 +20,7 @@ class DB:
         db = self.conn()
         c = db.cursor()
         gp = (username, password)
-        c.execute('select id from User where id = ? and password = ?', gp)
+        c.execute('select id, coins from User where id = ? and password = ?', gp)
         res = c.fetchall()
         if len(res) > 0:
             c.execute('Update User set last_login_date=? where id=?', (datetime.datetime.now(), username))
@@ -43,8 +43,27 @@ class DB:
         self.close()
         return False
 
+    def insert(self, usn, coins):
+        db = self.conn()
+        c = db.cursor()
+        c.execute('select id, playtimes from User where id = ?', (usn, ))
+        res = c.fetchall()
+        if len(res) > 0:
+            c.execute('Update User set coins=?, playtimes=? where id=?', (coins, res[0][1] + 1, usn))
+            db.commit()
+        self.close()
+
+    def get_coins(self, ID):
+        db = self.conn()
+        c = db.cursor()
+        c.execute('select id, coins from User where id = ?', (ID,))
+        res = c.fetchall()
+        self.close()
+        if len(res) > 0:
+            return res[0][1]
+        return 0
+
 
 if __name__ == '__main__':
     d = DB('test.db')
-    print(d.login('Mcclee', '15801799809n'))
-    print(d.register('Mcclee', '15801799809n'))
+    d.insert('123', 1000)
